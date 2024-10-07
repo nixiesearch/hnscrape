@@ -4,7 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.io.FileOutputStream
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import io.circe.syntax.*
 import fs2.Stream
 import cats.effect.unsafe.implicits.global
@@ -22,5 +22,14 @@ class WorkQueueTest extends AnyFlatSpec with Matchers {
     val queue  = WorkQueue.create(dir, 1, 0, 10).unsafeRunSync()
     val result = Stream.fromQueueNoneTerminated(queue).compile.toList.unsafeRunSync()
     result shouldBe List(0, 2, 3, 4, 5, 6, 7, 8, 9)
+    file.toFile.deleteOnExit()
+    dir.toFile.deleteOnExit()
+  }
+
+  it should "not fail when no dir given" in {
+    val dir   = Files.createTempDirectory("queue")
+    val queue = WorkQueue.create(dir, 1, 0, 10).unsafeRunSync()
+    queue.size.unsafeRunSync() shouldBe 11
+    dir.toFile.deleteOnExit()
   }
 }

@@ -14,7 +14,9 @@ import java.io.FileInputStream
 
 object WorkQueue extends Logging {
   def create(dir: JPath, workers: Int, min: Int, max: Int): IO[Queue[IO, Option[Int]]] = for {
-    files <- Files[IO].list(Path.fromNioPath(dir)).compile.toList
+    exists <- Files[IO].exists(Path.fromNioPath(dir))
+    _      <- IO.whenA(!exists)(Files[IO].createDirectories(Path.fromNioPath(dir)))
+    files  <- Files[IO].list(Path.fromNioPath(dir)).compile.toList
     docids <- Stream
       .emits[IO, Path](files)
       .parEvalMapUnordered(workers)(file =>

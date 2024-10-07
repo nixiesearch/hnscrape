@@ -7,7 +7,7 @@ import java.nio.file.Paths
 object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = for {
     args  <- ArgsParser.parse(args)
-    queue <- WorkQueue.create(Paths.get(args.dir), args.workers, 1, 1000000)
+    queue <- WorkQueue.create(Paths.get(args.dir), args.workers, args.from, args.to)
     _ <- HNAPI
       .create()
       .use(api =>
@@ -20,7 +20,7 @@ object Main extends IOApp {
             api.item(id).map(Option.apply).handleErrorWith(e => queue.offer(Some(id)).map(_ => None))
           )
           .flatMap(op => Stream.fromOption(op))
-          .through(RollingJsonSink.write(Paths.get(args.dir), 100000))
+          .through(RollingJsonSink.write(Paths.get(args.dir), args.batch))
           .compile
           .drain
       )

@@ -11,17 +11,19 @@ import java.io.{BufferedOutputStream, FileOutputStream, OutputStream}
 import java.nio.file.Path
 
 object RollingJsonSink extends Logging {
-  private def flushBuffer[T: Encoder](dir: Path, buffer: List[T]): Unit = {
+  private def flushBuffer[T <: Item: Encoder](dir: Path, buffer: List[T]): Unit = {
+    val minId = String.format("%08d", buffer.map(_.id).min)
+    val maxId = String.format("%08d", buffer.map(_.id).max)
     val stream = new BufferedOutputStream(
       new ZstdOutputStream(
-        new FileOutputStream(dir.resolve(s"items_${System.currentTimeMillis()}.jsonl.zst").toFile)
+        new FileOutputStream(dir.resolve(s"items_${minId}_${maxId}_${System.currentTimeMillis()}.jsonl.zst").toFile)
       )
     )
     buffer.foreach(item => stream.write((item.asJson.noSpaces + "\n").getBytes()))
     stream.close()
   }
 
-  private def writeUncons[T: Encoder](
+  private def writeUncons[T <: Item: Encoder](
       stream: Stream[IO, T],
       dir: Path,
       batchSize: Int,
@@ -42,7 +44,7 @@ object RollingJsonSink extends Logging {
           writeUncons(next, dir, batchSize, mergedBuffer)
         }
     }
-  def write[T: Encoder](dir: Path, batchSize: Int): Pipe[IO, T, Unit] = { in =>
+  def write[T <: Item: Encoder](dir: Path, batchSize: Int): Pipe[IO, T, Unit] = { in =>
     writeUncons(in, dir, batchSize, Nil).stream.drain
   }
 
