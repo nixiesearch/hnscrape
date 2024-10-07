@@ -11,13 +11,13 @@ object Main extends IOApp {
     _ <- HNAPI
       .create()
       .use(api =>
-        Stream
-          .fromQueueNoneTerminated(queue)
+        queue
+          .stream()
           .chunkN(64)
           .unchunks
           .through(PrintProgress.tap("items"))
           .parEvalMapUnordered(args.workers)(id =>
-            api.item(id).map(Option.apply).handleErrorWith(e => queue.offer(Some(id)).map(_ => None))
+            api.item(id).map(Option.apply).handleErrorWith(e => queue.offer(id).map(_ => None))
           )
           .flatMap(op => Stream.fromOption(op))
           .through(RollingJsonSink.write(Paths.get(args.dir), args.batch))

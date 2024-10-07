@@ -11,9 +11,16 @@ import fs2.io.readInputStream
 import io.circe.parser.*
 
 import java.io.FileInputStream
+import java.util.concurrent.ConcurrentLinkedQueue
+import scala.jdk.CollectionConverters.*
+
+case class WorkQueue(queue: ConcurrentLinkedQueue[Int]) {
+  def stream(): Stream[IO, Int] = Stream.fromIterator[IO](queue.iterator().asScala, 1024)
+  def offer(id: Int): IO[Unit]  = IO(queue.offer(id))
+}
 
 object WorkQueue extends Logging {
-  def create(dir: JPath, workers: Int, min: Int, max: Int): IO[Queue[IO, Option[Int]]] = for {
+  def create(dir: JPath, workers: Int, min: Int, max: Int): IO[WorkQueue] = for {
     exists <- Files[IO].exists(Path.fromNioPath(dir))
     _      <- IO.whenA(!exists)(Files[IO].createDirectories(Path.fromNioPath(dir)))
     files  <- Files[IO].list(Path.fromNioPath(dir)).compile.toList
@@ -38,12 +45,18 @@ object WorkQueue extends Logging {
       .compile
       .fold(Set.empty[Int])((a, b) => a ++ b)
     _     <- info(s"${docids.size} docs already scraped")
-    queue <- Queue.unbounded[IO, Option[Int]]
-    _     <- Stream.range(min, max).filterNot(docids.contains).evalMap(id => queue.offer(Some(id))).compile.drain
-    _     <- queue.offer(None)
-    size  <- queue.size
-    _     <- info(s"added ${size} docs to the queue")
+    queue <- IO(new ConcurrentLinkedQueue[Int]())
+    _ <- Stream
+      .range(min, max)
+      .through(PrintProgress.tap("enqueueing"))
+      .chunkN(1024 * 64)
+      .parEvalMap(8)(chunk => IO(chunk.filterNot(docids.contains).toList.asJavaCollection))
+      .parEvalMap(8)(chunk => IO(queue.addAll(chunk)))
+      .compile
+      .drain
+    size <- IO(queue.size())
+    _    <- info(s"added ${size} docs to the queue")
   } yield {
-    queue
+    new WorkQueue(queue)
   }
 }

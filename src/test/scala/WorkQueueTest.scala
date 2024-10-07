@@ -20,7 +20,7 @@ class WorkQueueTest extends AnyFlatSpec with Matchers {
     out.close()
 
     val queue  = WorkQueue.create(dir, 1, 0, 10).unsafeRunSync()
-    val result = Stream.fromQueueNoneTerminated(queue).compile.toList.unsafeRunSync()
+    val result = queue.stream().compile.toList.unsafeRunSync()
     result shouldBe List(0, 2, 3, 4, 5, 6, 7, 8, 9)
     file.toFile.deleteOnExit()
     dir.toFile.deleteOnExit()
@@ -29,7 +29,7 @@ class WorkQueueTest extends AnyFlatSpec with Matchers {
   it should "not fail when no dir given" in {
     val dir   = Files.createTempDirectory("queue")
     val queue = WorkQueue.create(dir, 1, 0, 10).unsafeRunSync()
-    queue.size.unsafeRunSync() shouldBe 11
+    queue.stream().compile.count.unsafeRunSync() shouldBe 10
     dir.toFile.deleteOnExit()
   }
 }
